@@ -1,6 +1,6 @@
 # DocApiLab by SeedCrafterLabs
 
-Convierte documentacion publica de APIs REST en sandboxes locales para desarrollar antes de recibir credenciales del proveedor.
+**De documentación a localhost.** Crea un sandbox de una API antes de conseguir credenciales del proveedor. Agrega documentación pública o un contrato OpenAPI, desarrolla tu integración y revisa un parche para migrar al proveedor real. La pantalla de inicio también da acceso al catálogo de APIs, que incluye specs integradas (INEGI, Frankfurter, JSONPlaceholder y PokéAPI) listas para crear un sandbox con un clic.
 
 ## Inicio local
 
@@ -12,7 +12,7 @@ npm run build
 npm start
 ```
 
-Abre automaticamente http://127.0.0.1:4000. Si el puerto esta ocupado, muestra otro disponible. Ctrl+C detiene el servidor.
+Abre `http://localhost:4000` automáticamente. Si el puerto está ocupado, imprime el siguiente disponible. Elige **Agrega tu documentación** para pegar una URL o importar OpenAPI, o **Revisa nuestro catálogo de APIs** para explorar el catálogo. Las entradas se definen en `src/server/catalog.ts` (specs OpenAPI en `src/server/builtin-specs.ts`); son contratos simulados, no llaman al proveedor. Importar OpenAPI no requiere clave de IA.
 
 En Ajustes, elige **OpenAI, DeepSeek, Google Gemini o Anthropic**, guarda tu API key personal y la clave de **Firecrawl**. Solo necesitas uno de los cuatro proveedores de IA, mas Firecrawl. El modelo es configurable.
 
