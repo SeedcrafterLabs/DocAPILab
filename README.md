@@ -57,4 +57,13 @@ npm test
 npm run build
 ```
 
+## Incrustar en un host sin servidor persistente
+
+`src/server/index.ts` exporta `createApp`, `createStore` y `SettingsStore` para usar docs2api dentro de otra aplicación (por ejemplo, funciones serverless). Con PostgreSQL, todo el estado compartido vive en la base de datos, de modo que cualquier instancia puede atender cualquier petición:
+
+- **Trabajos de indexación**, **cuotas de IA** (ventana de 24 h, contadores atómicos) y el **bloqueo de una generación a la vez** (con expiración automática) se guardan en las tablas `jobs`, `quotas` y `locks`. Con SQLite (uso local) siguen en memoria del proceso.
+- `createApp({ runInBackground })` recibe la promesa del trabajo de indexación; en plataformas que congelan la instancia al responder, pásale su equivalente de `waitUntil`.
+- `createApp({ clientAddress })` define cómo identificar la red del visitante; detrás de un proxy usa una cabecera que establezca la propia plataforma, nunca una que pueda enviar el cliente.
+- `createStore(dir, url, { onPool })` entrega el pool de PostgreSQL para registrarlo en el gestor de conexiones de la plataforma. Usa una cadena de conexión con pool.
+
 Tareas del equipo: [TODO_MVP.md](TODO_MVP.md). Licencia MIT.

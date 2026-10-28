@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "dev:server": "tsx watch src/server/cli.ts --no-open",
-    "build": "tsc --noEmit && vite build && tsup",
+    "build:web": "tsc --noEmit && vite build",
+    "build": "npm run build:web && tsup",
     "start": "node --env-file-if-exists=.env dist/server/cli.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

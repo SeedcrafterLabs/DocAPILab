@@ -12,15 +12,16 @@ import { fetchFirecrawlDocumentation } from './firecrawl.js';
 import { proposeMigration } from './migration.js';
 import type { Contract, Integration, Job } from '../shared/types.js';
 
-interface Options { store?: Store; settings?: SettingsStore; hosted?: boolean; sessionSecret?: string; extract?: typeof extractContract; fetchDocs?: typeof fetchDocumentation }
+interface Options { store?: Store; settings?: SettingsStore; hosted?: boolean; sessionSecret?: string; extract?: typeof extractContract; fetchDocs?: typeof fetchDocumentation; runInBackground?: (work: Promise<unknown>) => void; clientAddress?: (req: Request) => string | undefined }
+const DAY = 86_400_000, GENERATION_LOCK_TTL = 330_000;
 export async function createApp(options: Options = {}) {
-  const ownedJobs = new Map<string, { owner: string; job: Job }>();
   const app = express(); const store = options.store || await createStore(); const settings = options.settings || new SettingsStore();
   const hosted = options.hosted ?? process.env.DOCS2API_MODE === 'hosted';
   const sessionSecret = options.sessionSecret || process.env.SESSION_SECRET || (hosted ? '' : randomUUID());
   if (!sessionSecret) throw new Error('SESSION_SECRET es obligatorio en modo hosted.');
-  let busy = false, totalCalls = 0;
-  const quotas = new Map<string, number>();
+  // Serverless platforms freeze the instance once the response is sent unless told otherwise (waitUntil).
+  const clientAddress = options.clientAddress || ((req: Request) => req.socket.remoteAddress);
+  const runInBackground = options.runInBackground || ((work: Promise<unknown>) => { void work; });
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Referrer-Policy', 'no-referrer');
@@ -83,18 +84,19 @@ export async function createApp(options: Options = {}) {
     const { url } = z.object({ url: z.url().max(2000) }).parse(req.body);
     const current = settings.read();
     if (!options.fetchDocs && (!current.apiKey || !current.firecrawlApiKey)) return res.status(400).json({ error: 'Configura una clave de OpenAI, DeepSeek, Google Gemini o Anthropic y tu clave de Firecrawl en Ajustes.' });
-    if (busy) return res.status(429).json({ error: 'Hay una generación en curso. Intenta de nuevo en unos segundos.' });
     const owner = res.locals.owner as string;
-    // In hosted mode, use the actual TCP peer as well as the signed session; never trust forwarded headers.
-    const quotaKey = hosted ? req.socket.remoteAddress || owner : owner;
-    if ((quotas.get(quotaKey) || 0) >= Number(process.env.AI_MAX_CALLS_PER_SESSION || (hosted ? 3 : 100))) return res.status(429).json({ error: 'Límite de generación alcanzado para esta sesión/red.' });
-    if (totalCalls >= Number(process.env.AI_MAX_CALLS_TOTAL || (hosted ? 30 : 1000))) return res.status(429).json({ error: 'Presupuesto de llamadas de esta instancia agotado.' });
+    // In hosted mode, key by network address as well as the signed session. The default is the TCP peer; behind a platform proxy pass `clientAddress` to read a header the platform sets itself, never a client-supplied forwarding header.
+    const quotaKey = 'net:' + (hosted ? clientAddress(req) || owner : owner);
+    const sessionLimit = Number(process.env.AI_MAX_CALLS_PER_SESSION || (hosted ? 3 : 100)), totalLimit = Number(process.env.AI_MAX_CALLS_TOTAL || (hosted ? 30 : 1000));
+    if ((await store.quota(quotaKey)) >= sessionLimit) return res.status(429).json({ error: 'Límite de generación alcanzado para esta sesión/red.' });
+    if ((await store.quota('total')) >= totalLimit) return res.status(429).json({ error: 'Presupuesto de llamadas de esta instancia agotado.' });
+    if (!(await store.lock('generation', GENERATION_LOCK_TTL))) return res.status(429).json({ error: 'Hay una generación en curso. Intenta de nuevo en unos segundos.' });
     const job: Job = { id: randomUUID(), state: 'queued', message: 'Preparando documentación…', sourceUrl: url, pages: [], integrationIds: [] };
-    ownedJobs.set(job.id, { owner, job });
-    if (ownedJobs.size > 200) ownedJobs.delete(ownedJobs.keys().next().value!);
-    busy = true;
+    // Progress is persisted so polling works from any instance. A failed update must not abort the crawl.
+    const sync = () => store.saveJob(owner, job).catch(() => {});
+    try { await store.saveJob(owner, job); } catch (error) { await store.unlock('generation').catch(() => {}); throw error; }
     res.status(202).json(job);
-    void (async () => {
+    runInBackground((async () => {
       try {
         const queue = [{ url, title: 'Documentación inicial', score: 0, depth: 0 }];
         const visited = new Set<string>(); let modelCalls = 0;
@@ -102,7 +104,7 @@ export async function createApp(options: Options = {}) {
           queue.sort((a, b) => b.score - a.score);
           const next = queue.shift()!; if (visited.has(next.url)) continue; visited.add(next.url);
           const page: NonNullable<Job['pages']>[number] = { url: next.url, title: next.title, state: 'reading' };
-          job.pages!.push(page); job.state = 'fetching'; job.message = `Leyendo página ${visited.size}/8: ${next.title}`;
+          job.pages!.push(page); job.state = 'fetching'; job.message = `Leyendo página ${visited.size}/8: ${next.title}`; await sync();
           try {
             const doc = options.fetchDocs ? await options.fetchDocs(next.url) : await fetchFirecrawlDocumentation(next.url, current.firecrawlApiKey);
             if (next.depth < 2) for (const link of (doc.links || []).slice(0, 12)) if (!visited.has(link.url) && !queue.some(entry => entry.url === link.url)) queue.push({ ...link, depth: next.depth + 1 });
@@ -112,17 +114,18 @@ export async function createApp(options: Options = {}) {
             else {
               if (!current.apiKey) throw new Error('Agrega la API key del proveedor seleccionado en Ajustes.');
               if (modelCalls >= 3) { page.state = 'skipped'; page.message = 'Límite de 3 análisis de IA por indexación.'; continue; }
-              if (totalCalls >= Number(process.env.AI_MAX_CALLS_TOTAL || (hosted ? 30 : 1000)) || (quotas.get(quotaKey) || 0) >= Number(process.env.AI_MAX_CALLS_PER_SESSION || (hosted ? 3 : 100))) { page.state = 'skipped'; page.message = 'Límite de consumo alcanzado.'; break; }
-              totalCalls++; modelCalls++; quotas.set(quotaKey, (quotas.get(quotaKey) || 0) + 1);
-              page.state = 'analyzing'; job.state = 'extracting'; job.message = `Analizando ${next.title} con ${current.provider}…`;
+              if (!(await store.consume(quotaKey, sessionLimit, DAY)) || !(await store.consume('total', totalLimit, DAY))) { page.state = 'skipped'; page.message = 'Límite de consumo alcanzado.'; break; }
+              modelCalls++;
+              page.state = 'analyzing'; job.state = 'extracting'; job.message = `Analizando ${next.title} con ${current.provider}…`; await sync();
               contract = await (options.extract || extractContract)(doc.text, doc.sourceUrl, current.apiKey, current.model, current.provider);
             }
-            job.state = 'validating'; job.message = 'Validando contrato y ejemplos JSON…';
+            job.state = 'validating'; job.message = 'Validando contrato y ejemplos JSON…'; await sync();
             contract = await validateContract(contract);
             const item = await createIntegration(contract, owner, doc.sourceUrl);
             page.state = 'ready'; page.title = item.name; page.integrationId = item.id; page.operations = operations(contract).length;
             job.integrationId ||= item.id; job.integrationIds!.push(item.id);
           } catch (error) { page.state = 'skipped'; page.message = safeError(error); }
+          await sync();
           // A concrete endpoint page is a complete request; only hubs expand into a crawl.
           if (next.depth === 0 && page.state === 'ready') break;
           if (modelCalls >= 3) break;
@@ -130,11 +133,11 @@ export async function createApp(options: Options = {}) {
         if (!job.integrationIds!.length) throw new Error('No encontramos endpoints verificables. El sitio puede ser un índice, requerir JavaScript o una referencia de API más específica. ' + (job.pages?.at(-1)?.message || ''));
         job.state = 'ready'; job.message = `${job.integrationIds!.length} sandbox(s) listos. ${visited.size} páginas revisadas.`;
       } catch (error) { job.state = 'failed'; job.error = safeError(error); job.message = job.error; }
-      finally { busy = false; }
-    })();
+      finally { await sync(); await store.unlock('generation').catch(() => {}); }
+    })());
   });
-  app.get('/api/jobs', (_req, res) => res.json([...ownedJobs.values()].filter(entry => entry.owner === res.locals.owner).map(entry => entry.job).reverse().slice(0, 20)));
-  app.get('/api/jobs/:id', (req, res) => { const entry = ownedJobs.get(req.params.id); if (!entry || entry.owner !== res.locals.owner) return res.status(404).json({ error: 'Generación no encontrada.' }); res.json(entry.job); });
+  app.get('/api/jobs', async (_req, res) => res.json(await store.listJobs(res.locals.owner)));
+  app.get('/api/jobs/:id', async (req, res) => { const job = await store.getJob(req.params.id, res.locals.owner); if (!job) return res.status(404).json({ error: 'Generación no encontrada.' }); res.json(job); });
   app.get('/api/integrations/:id/contract', async (req, res) => { const item = await getOwned(req.params.id, res.locals.owner); res.attachment(item.prefix + '.openapi.json').json(item.contract); });
   app.patch('/api/integrations/:id', async (req, res) => {
     const item = await getOwned(req.params.id, res.locals.owner);
