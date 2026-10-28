@@ -4,6 +4,7 @@ import { request as httpsRequest } from 'node:https';
 import { load } from 'cheerio';
 import { parse } from 'yaml';
 import OpenAI from 'openai';
+import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import { validateContract, operations } from './contracts.js';
 import type { Contract } from '../shared/types.js';
@@ -154,7 +155,11 @@ export async function extractContract(text: string, sourceUrl: string, apiKey: s
   const user = `Source: ${sourceUrl}\n<documentation>\n${compactDocumentation(text)}\n</documentation>`;
   const limit = Number(process.env.AI_MAX_OUTPUT_TOKENS || 8000);
   let result: unknown;
-  if (provider === 'deepseek') {
+  if (provider === 'openai') {
+    const client = new OpenAI({ apiKey, timeout: 90_000, maxRetries: 0 });
+    const response = await client.responses.parse({ model, store: false, max_output_tokens: limit, input: [{ role: 'system', content: system }, { role: 'user', content: user }], text: { format: zodTextFormat(extractionSchema, 'api_contract') } });
+    result = response.output_parsed;
+  } else if (provider === 'deepseek') {
     const client = new OpenAI({ apiKey, baseURL: 'https://api.deepseek.com', timeout: 90_000, maxRetries: 0 });
     const response = await client.chat.completions.create({ model, max_tokens: limit, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system + '\nReturn JSON only matching this JSON schema:\n' + JSON.stringify(z.toJSONSchema(extractionSchema)) + '\nExample shape: {"title":"API","baseUrl":"https://api.example.com","warnings":[],"operations":[]}' }, { role: 'user', content: user }], ...({ thinking: { type: 'disabled' } } as any) });
     const choice = response.choices[0];

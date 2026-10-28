@@ -14,7 +14,7 @@ npm start
 
 Abre automaticamente http://127.0.0.1:4000. Si el puerto esta ocupado, muestra otro disponible. Ctrl+C detiene el servidor.
 
-En Ajustes, elige **DeepSeek, Google Gemini o Anthropic**, guarda tu API key personal y la clave de **Firecrawl**. Solo necesitas uno de los tres proveedores de IA, mas Firecrawl. El modelo es configurable.
+En Ajustes, elige **OpenAI, DeepSeek, Google Gemini o Anthropic**, guarda tu API key personal y la clave de **Firecrawl**. Solo necesitas uno de los cuatro proveedores de IA, mas Firecrawl. El modelo es configurable.
 
 Pega una URL de documentacion. Firecrawl obtiene Markdown y enlaces; la IA propone el contrato; DocApiLab valida y publica los endpoints simulados. El progreso aparece en Mis sandboxes. El catalogo esta vacio por ahora.
 

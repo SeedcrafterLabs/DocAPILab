@@ -64,7 +64,7 @@ export async function createApp(options: Options = {}) {
   app.get('/api/settings', (_req, res) => res.json(settings.publicStatus(hosted)));
   app.put('/api/settings', (req, res) => {
     if (hosted) return res.status(403).json({ error: 'La configuración de la demo la administra el servidor.' });
-    const body = z.object({ provider: z.enum(['google', 'deepseek', 'anthropic']).optional(), apiKey: z.string().max(500).optional(), firecrawlApiKey: z.string().max(500).optional(), model: z.string().regex(/^[a-zA-Z0-9._:-]+$/).max(100) }).parse(req.body);
+    const body = z.object({ provider: z.enum(['openai', 'google', 'deepseek', 'anthropic']).optional(), apiKey: z.string().max(500).optional(), firecrawlApiKey: z.string().max(500).optional(), model: z.string().regex(/^[a-zA-Z0-9._:-]+$/).max(100) }).parse(req.body);
     const current = settings.read(body.provider); settings.save({ provider: current.provider, model: body.model, firecrawlApiKey: body.firecrawlApiKey, apiKey: body.apiKey === '' ? undefined : body.apiKey || current.apiKey }); res.json({ saved: true });
   });
   app.get('/api/integrations', async (_req, res) => res.json((await store.list(res.locals.owner)).map(publicIntegration)));
@@ -81,7 +81,7 @@ export async function createApp(options: Options = {}) {
   app.post('/api/jobs', async (req, res) => {
     const { url } = z.object({ url: z.url().max(2000) }).parse(req.body);
     const current = settings.read();
-    if (!options.fetchDocs && (!current.apiKey || !current.firecrawlApiKey)) return res.status(400).json({ error: 'Configura una clave de DeepSeek, Google Gemini o Anthropic y tu clave de Firecrawl en Ajustes.' });
+    if (!options.fetchDocs && (!current.apiKey || !current.firecrawlApiKey)) return res.status(400).json({ error: 'Configura una clave de OpenAI, DeepSeek, Google Gemini o Anthropic y tu clave de Firecrawl en Ajustes.' });
     if (busy) return res.status(429).json({ error: 'Hay una generación en curso. Intenta de nuevo en unos segundos.' });
     const owner = res.locals.owner as string;
     // In hosted mode, use the actual TCP peer as well as the signed session; never trust forwarded headers.

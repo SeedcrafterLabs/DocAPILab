@@ -1,6 +1,6 @@
 # DocApiLab by SeedCrafterLabs - MVP local
 
-Objetivo: ejecutar con npx, configurar una clave personal de DeepSeek, Google Gemini o Anthropic y Firecrawl, pegar documentacion y consumir un sandbox local. Catalogo vacio. SQLite automatico; no requiere base central ni cuentas propias.
+Objetivo: ejecutar con npx, configurar una clave personal de OpenAI, DeepSeek, Google Gemini o Anthropic y Firecrawl, pegar documentacion y consumir un sandbox local. Catalogo vacio. SQLite automatico; no requiere base central ni cuentas propias.
 
 ## Dev 1 - Interfaz y experiencia
 
