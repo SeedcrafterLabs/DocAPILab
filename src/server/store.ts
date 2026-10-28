@@ -33,7 +33,7 @@ export async function createStore(directory = dataDirectory(), databaseUrl = pro
     async close() { db.close(); }
   };
 }
-export interface Settings { apiKey?: string; model: string; provider?: Provider }
+export interface Settings { apiKey?: string; model: string; provider?: Provider; firecrawlApiKey?: string }
 export class SettingsStore {
   constructor(private directory = dataDirectory()) {}
   private saved(): any {
@@ -42,21 +42,22 @@ export class SettingsStore {
   }
   read(selected?: Provider): Settings & { provider: Provider } {
     const saved = this.saved();
-    const provider: Provider = selected || (process.env.DOCS2API_MODE === 'hosted' ? (process.env.DOCS2API_PROVIDER as Provider) : undefined) || saved.provider || (process.env.DOCS2API_PROVIDER as Provider) || 'openai';
+    const requested = selected || (process.env.DOCS2API_MODE === 'hosted' ? (process.env.DOCS2API_PROVIDER as Provider) : undefined) || saved.provider || (process.env.DOCS2API_PROVIDER as Provider) || 'deepseek';
+    const provider: Provider = requested in providers ? requested : 'deepseek';
     const entry = providers[provider]; if (!entry) throw new Error('Proveedor no soportado.');
-    const value = saved.providers?.[provider] || (provider === 'openai' ? { apiKey: saved.apiKey, model: saved.model } : {});
-    return { provider, apiKey: process.env[entry.keyEnv] || value.apiKey, model: process.env[entry.modelEnv] || value.model || entry.model };
+    const value = saved.providers?.[provider] || {};
+    return { provider, firecrawlApiKey: process.env.FIRECRAWL_API_KEY || saved.firecrawlApiKey, apiKey: process.env[entry.keyEnv] || value.apiKey, model: process.env[entry.modelEnv] || value.model || entry.model };
   }
   publicStatus(hosted: boolean) {
     const current = this.read();
-    return { provider: current.provider, model: current.model, hasKey: Boolean(current.apiKey), hosted, keyManaged: hosted || Boolean(process.env[providers[current.provider].keyEnv]), providers: Object.fromEntries((Object.keys(providers) as Provider[]).map(id => { const value = this.read(id); return [id, { name: providers[id].name, model: value.model, hasKey: Boolean(value.apiKey), keyManaged: hosted || Boolean(process.env[providers[id].keyEnv]) }]; })) };
+    return { hasFirecrawlKey: Boolean(current.firecrawlApiKey), firecrawlKeyManaged: hosted || Boolean(process.env.FIRECRAWL_API_KEY), provider: current.provider, model: current.model, hasKey: Boolean(current.apiKey), hosted, keyManaged: hosted || Boolean(process.env[providers[current.provider].keyEnv]), providers: Object.fromEntries((Object.keys(providers) as Provider[]).map(id => { const value = this.read(id); return [id, { name: providers[id].name, model: value.model, hasKey: Boolean(value.apiKey), keyManaged: hosted || Boolean(process.env[providers[id].keyEnv]) }]; })) };
   }
   save(value: Settings) {
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const path = join(this.directory, 'settings.json');
-    const saved = this.saved(); const provider = value.provider || 'openai';
+    const saved = this.saved(); const provider = value.provider || 'deepseek';
     const existing = saved.providers || (saved.apiKey || saved.model ? { openai: { apiKey: saved.apiKey, model: saved.model } } : {});
-    const updated = { provider, providers: { ...existing, [provider]: { model: value.model, apiKey: value.apiKey } } };
+    const updated = { provider, firecrawlApiKey: value.firecrawlApiKey === undefined ? saved.firecrawlApiKey : value.firecrawlApiKey, providers: { ...existing, [provider]: { model: value.model, apiKey: value.apiKey } } };
     writeFileSync(path, JSON.stringify(updated), { mode: 0o600 });
     chmodSync(path, 0o600);
   }

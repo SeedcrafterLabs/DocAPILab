@@ -1,10 +1,10 @@
 {
-  "name": "docs2api-lab",
+  "name": "@seedcrafterlabs/docapilab",
   "version": "0.1.0",
   "description": "Turn API documentation into local sandboxes. Build before credentials arrive.",
   "type": "module",
   "license": "MIT",
-  "bin": { "docs2api": "dist/server/cli.js" },
+  "bin": { "docapilab": "dist/server/cli.js" },
   "files": ["dist", "README.md", "LICENSE"],
   "engines": { "node": ">=24.0.0" },
   "scripts": {
