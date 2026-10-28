@@ -1,0 +1,6 @@
+export const providers = {
+  openai: { name: 'OpenAI', model: 'gpt-4o-mini', keyEnv: 'OPENAI_API_KEY', modelEnv: 'OPENAI_MODEL' },
+  deepseek: { name: 'DeepSeek', model: 'deepseek-flash', keyEnv: 'DEEPSEEK_API_KEY', modelEnv: 'DEEPSEEK_MODEL' },
+  anthropic: { name: 'Anthropic', model: 'claude-haiku-4-5', keyEnv: 'ANTHROPIC_API_KEY', modelEnv: 'ANTHROPIC_MODEL' }
+} as const;
+export type Provider = keyof typeof providers;
