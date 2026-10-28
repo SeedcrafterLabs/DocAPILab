@@ -43,8 +43,8 @@ try {
   await click('Pausar'); await until(`document.body.innerText.includes('SANDBOX PAUSADO')`); await click('Iniciar');
   await until(`document.body.innerText.includes('SANDBOX ACTIVO')`);
   await click('Migrar a real'); await until(`document.body.innerText.includes('Proponer migración')`);
-  await click('Ajustes'); await until(`document.body.innerText.includes('Proveedor de inteligencia artificial')`);
-  const providerOptions = await evaluate(`document.querySelector('select[aria-label="Proveedor de IA"]').options.length`); if (providerOptions !== 3) throw new Error('Missing provider options.');
+  await click('Ajustes'); await until(`document.body.innerText.includes('Modelo de inteligencia artificial')`);
+  const providerOptions = await evaluate(`document.querySelector('select[aria-label="Proveedor de IA"]').options.length`); if (providerOptions !== 4) throw new Error('Missing provider options.');
   await click('Catálogo de APIs');
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await wait(400);

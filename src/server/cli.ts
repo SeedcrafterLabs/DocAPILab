@@ -15,6 +15,6 @@ for (let attempt = 0; attempt < 20; attempt++) {
 if (!server) throw new Error('No hay puertos libres. Configura PORT.');
 const address = server.address() as import('node:net').AddressInfo;
 const url = `http://${host === '0.0.0.0' ? 'localhost' : host}:${address.port}`;
-console.log(`\n  docs2api · De documentación a tu API local\n\n  ${url}\n\n  Agrega tus docs o explora el catálogo. Ctrl+C para salir.\n`);
+console.log(`\n  DocApiLab by SeedCrafterLabs · De documentación a tu API local\n\n  ${url}\n\n  Agrega tus docs o explora el catálogo. Ctrl+C para salir.\n`);
 if (!process.argv.includes('--no-open') && process.env.DOCS2API_MODE !== 'hosted') void open(url).catch(() => {});
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { server!.close(() => { void store.close().then(() => process.exit(0)); }); });

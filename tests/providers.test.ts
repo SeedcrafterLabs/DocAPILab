@@ -33,19 +33,19 @@ it('recovers a literal URL citation when the model paraphrases the quote', () =>
   const contract = assembleExtraction(result as any, 'Use GET https://api.example.com/orders to list orders.', 'https://docs.example.com');
   expect(contract.paths['/orders'].get['x-evidence'].quote).toBe('https://api.example.com/orders');
 });
-it('keeps provider credentials independent and migrates legacy OpenAI settings', () => {
+it('keeps provider credentials independent without reusing legacy OpenAI credentials', () => {
   const directory = mkdtempSync(join(tmpdir(), 'docs2api-provider-'));
   try {
     writeFileSync(join(directory, 'settings.json'), JSON.stringify({ apiKey: 'sk-old-openai', model: 'gpt-4o-mini' }));
     const store = new SettingsStore(directory);
-    expect(store.read('openai').apiKey).toBe('sk-old-openai');
+    expect(store.read('google').apiKey).toBeUndefined();
     expect(store.read('deepseek').apiKey).toBeUndefined();
-    store.save({ provider: 'deepseek', model: 'deepseek-flash', apiKey: 'sk-deepseek' });
-    expect(store.read().provider).toBe('deepseek'); expect(store.read('openai').apiKey).toBe('sk-old-openai');
+    store.save({ provider: 'deepseek', model: 'deepseek-flash', apiKey: 'sk-deepseek', firecrawlApiKey: 'fc-personal' });
+    expect(store.read().provider).toBe('deepseek'); expect(store.read('google').apiKey).toBeUndefined();
     store.save({ provider: 'anthropic', model: 'claude-haiku-4-5', apiKey: 'sk-ant' });
-    expect(store.read('deepseek').apiKey).toBe('sk-deepseek');
+    expect(store.read('deepseek').apiKey).toBe('sk-deepseek'); expect(store.read().firecrawlApiKey).toBe('fc-personal');
     const status = JSON.stringify(store.publicStatus(false));
-    expect(status).not.toContain('sk-'); expect(Object.keys(store.publicStatus(false).providers)).toHaveLength(3);
+    expect(status).not.toContain('sk-'); expect(status).not.toContain('fc-personal'); expect(store.publicStatus(false).hasFirecrawlKey).toBe(true); expect(Object.keys(store.publicStatus(false).providers)).toHaveLength(4);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 it('uses DeepSeek JSON mode and validates its output', async () => {
@@ -75,4 +75,19 @@ it('uses Anthropic forced tool output without executing a tool', async () => {
 it('reports exhausted DeepSeek balance without exposing credentials', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: { message: 'Insufficient balance', type: 'insufficient_balance' } }, { status: 402 })));
   await expect(extractContract('GET /orders returns id', 'https://docs.example.com', 'sk-private', 'deepseek-flash', 'deepseek')).rejects.toMatchObject({ status: 402 });
+});
+
+it('uses Gemini structured output with credentials only in headers', async () => {
+ const mocked = vi.fn().mockResolvedValue(Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(extracted) }] } }] })); vi.stubGlobal('fetch', mocked);
+ const contract = await extractContract('GET /orders returns id', 'https://docs.example.com', 'private-google', 'gemini-3.8-flash', 'google');
+ expect(contract.paths['/orders'].get).toBeDefined();
+ const [url, init] = mocked.mock.calls[0]; expect(url).not.toContain('private-google'); expect(init.headers['x-goog-api-key']).toBe('private-google');
+ expect(JSON.parse(init.body).generationConfig.responseMimeType).toBe('application/json');
+});
+
+it('uses OpenAI Responses structured output without storing the request', async () => {
+ const mocked = vi.fn().mockResolvedValue(Response.json({ id: 'resp_test', object: 'response', status: 'completed', output: [{ id: 'msg_test', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify(extracted), annotations: [] }] }] })); vi.stubGlobal('fetch', mocked);
+ const contract = await extractContract('GET /orders returns id', 'https://docs.example.com', 'sk-openai-test', 'gpt-4o-mini', 'openai');
+ expect(contract.paths['/orders'].get).toBeDefined();
+ const [url, init] = mocked.mock.calls[0]; expect(String(url)).toContain('api.openai.com/v1/responses'); expect(JSON.parse(init.body).store).toBe(false);
 });
