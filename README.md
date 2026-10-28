@@ -1,6 +1,6 @@
 # docs2api
 
-**De documentación a localhost.** Crea un sandbox de una API antes de conseguir credenciales del proveedor. Agrega documentación pública o un contrato OpenAPI, desarrolla tu integración y revisa un parche para migrar al proveedor real. La pantalla de inicio también da acceso al catálogo de APIs, vacío por ahora y preparado para futuras integraciones revisadas.
+**De documentación a localhost.** Crea un sandbox de una API antes de conseguir credenciales del proveedor. Agrega documentación pública o un contrato OpenAPI, desarrolla tu integración y revisa un parche para migrar al proveedor real. La pantalla de inicio también da acceso al catálogo de APIs, que incluye specs integradas (INEGI, Frankfurter, JSONPlaceholder y PokéAPI) listas para crear un sandbox con un clic.
 
 ## Probar hoy
 
@@ -12,7 +12,7 @@ npm run build
 npm start
 ```
 
-Abre `http://localhost:4000` automáticamente. Si el puerto está ocupado, imprime el siguiente disponible. Elige **Agrega tu documentación** para pegar una URL o importar OpenAPI, o **Revisa nuestro catálogo de APIs** para explorar el catálogo. De momento no tiene entradas publicadas. Importar OpenAPI no requiere clave de IA.
+Abre `http://localhost:4000` automáticamente. Si el puerto está ocupado, imprime el siguiente disponible. Elige **Agrega tu documentación** para pegar una URL o importar OpenAPI, o **Revisa nuestro catálogo de APIs** para explorar el catálogo. Las entradas se definen en `src/server/catalog.ts` (specs OpenAPI en `src/server/builtin-specs.ts`); son contratos simulados, no llaman al proveedor. Importar OpenAPI no requiere clave de IA.
 
 ```sh
 curl "http://localhost:4000/INEGI/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/1002000001/es/00/true/BISE/2.0?type=json"

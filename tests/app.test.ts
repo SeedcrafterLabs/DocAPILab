@@ -33,7 +33,7 @@ describe('HTTP sandbox lifecycle', () => {
   beforeEach(async () => { dir = mkdtempSync(join(tmpdir(), 'docs2api-test-')); store = await createStore(':memory:', ''); ({ app } = await createApp({ store, settings: new SettingsStore(dir), hosted: false })); });
   afterEach(async () => { await store.close(); rmSync(dir, { recursive: true, force: true }); });
   it('runs INEGI without credentials, validates parameters and retains scenario state', async () => {
-    await request(app).get('/api/catalog').expect(200, []);
+    const listed = (await request(app).get('/api/catalog').expect(200)).body; expect(listed.map((c: any) => c.id)).toEqual(['inegi', 'frankfurter', 'jsonplaceholder', 'pokeapi']); expect(listed[0].contract).toBeUndefined();
     const created = await request(app).post('/api/integrations/catalog').send({ id: 'inegi' }).expect(201);
     const item = created.body; expect(item.owner).toBeUndefined();
     const url = item.operations[0].exampleUrl; expect(url).not.toMatch(/token/i);
@@ -167,5 +167,16 @@ describe('documentation boundaries', () => {
   it('rejects invented evidence', () => {
     const contract = assembleExtraction({ title: 'Test', baseUrl: 'https://api.example.com', warnings: [], operations: [{ path: '/invented-path', evidenceQuote: 'GET /invented-path', summary: 'Invented' } as any] }, 'GET /orders', 'https://docs.example.com');
     expect(contract.paths).toEqual({}); expect(contract['x-warnings']?.[0]).toContain('cita verificable');
+  });
+});
+describe('built-in catalog', () => {
+  it('every entry validates and creates a working sandbox', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'docs2api-test-')); const store = await createStore(':memory:', '');
+    const { app } = await createApp({ store, settings: new SettingsStore(dir), hosted: false });
+    for (const { id } of (await request(app).get('/api/catalog')).body) {
+      const item = (await request(app).post('/api/integrations/catalog').send({ id }).expect(201)).body;
+      await request(app).get(item.operations[0].exampleUrl).expect(200);
+    }
+    await store.close(); rmSync(dir, { recursive: true, force: true });
   });
 });

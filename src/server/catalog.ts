@@ -1,4 +1,5 @@
-import type { Contract } from '../shared/types.js';
+import { methods, type Contract } from '../shared/types.js';
+import { frankfurter, jsonPlaceholder, pokeApi } from './builtin-specs.js';
 export const inegiDocs = `API de indicadores INEGI. Método GET. Ejemplo documentado: https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/1002000001/es/00/true/BISE/2.0/[Aquí va tu Token]?type=json. Idioma: es o en. Área: 00 nacional; depende del indicador. Recientes: true para último dato, false para serie histórica. Fuente BISE. Versión 2.0. Token obligatorio en API real. Respuesta JSON: Header y Series con OBSERVATIONS. Fuente: https://www.inegi.org.mx/servicios/api_indicadores.html`;
 export const inegi: Contract = {
   openapi: '3.0.3', info: { title: 'INEGI', version: '1.0.0', description: 'Indicadores de México. Datos simulados para desarrollo; no son estadísticas oficiales.' },
@@ -23,7 +24,13 @@ export const inegi: Contract = {
     } } } }
   } } }
 };
-export const demoCatalog = [{ id: 'inegi', name: 'INEGI', category: 'Datos públicos', description: 'Indicadores, población y estadísticas de México. Empieza sin tokens ni registros.', sourceUrl: 'https://www.inegi.org.mx/servicios/api_indicadores.html', operations: 1, tags: ['REST', 'JSON', 'Sin API key'], contract: inegi }];
-
-// Published entries will be added after review.
-export const catalog: typeof demoCatalog = [];
+export interface CatalogEntry { id: string; name: string; category: string; description: string; sourceUrl: string; operations: number; tags: string[]; contract: Contract }
+const operationCount = (contract: Contract) => Object.values(contract.paths).reduce((n, entry) => n + methods.filter(m => entry[m]).length, 0);
+const entry = (id: string, category: string, description: string, sourceUrl: string, tags: string[], contract: Contract): CatalogEntry => ({ id, name: contract.info.title, category, description, sourceUrl, tags, operations: operationCount(contract), contract });
+// Built-in specs available on first start. Add new entries here.
+export const catalog: CatalogEntry[] = [
+  entry('inegi', 'Datos públicos', 'Indicadores, población y estadísticas de México. Empieza sin tokens ni registros.', 'https://www.inegi.org.mx/servicios/api_indicadores.html', ['REST', 'JSON', 'Sin API key'], inegi),
+  entry('frankfurter', 'Finanzas', 'Tipos de cambio y monedas del Banco Central Europeo.', 'https://frankfurter.dev', ['REST', 'JSON', 'Sin API key'], frankfurter),
+  entry('jsonplaceholder', 'Prototipos', 'API REST falsa con publicaciones: ideal para probar GET y POST.', 'https://jsonplaceholder.typicode.com', ['REST', 'JSON', 'GET/POST'], jsonPlaceholder),
+  entry('pokeapi', 'Entretenimiento', 'Catálogo de Pokémon con paginación y detalle por nombre.', 'https://pokeapi.co/docs/v2', ['REST', 'JSON', 'Sin API key'], pokeApi)
+];

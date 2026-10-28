@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { z } from 'zod';
-import { catalog, demoCatalog, inegi } from './catalog.js';
+import { catalog } from './catalog.js';
 import { createStore, SettingsStore, type Store } from './store.js';
 import { compileSchema, operations, localPath, routePattern, publicIntegration, responseExample, validateContract, version, isSecret } from './contracts.js';
 import { fetchDocumentation, extractContract, hasEndpointDocumentation } from './extract.js';
@@ -68,9 +68,10 @@ export async function createApp(options: Options = {}) {
   });
   app.get('/api/integrations', async (_req, res) => res.json((await store.list(res.locals.owner)).map(publicIntegration)));
   app.post('/api/integrations/catalog', async (req, res) => {
-    if (req.body.id !== 'inegi') return res.status(404).json({ error: 'API no encontrada en el catálogo.' });
-    const contract = await validateContract(structuredClone(inegi));
-    res.status(201).json(publicIntegration(await createIntegration(contract, res.locals.owner, demoCatalog[0].sourceUrl)));
+    const entry = catalog.find(c => c.id === req.body.id);
+    if (!entry) return res.status(404).json({ error: 'API no encontrada en el catálogo.' });
+    const contract = await validateContract(structuredClone(entry.contract));
+    res.status(201).json(publicIntegration(await createIntegration(contract, res.locals.owner, entry.sourceUrl)));
   });
   app.post('/api/integrations/import', async (req, res) => {
     const body = z.object({ contract: z.any() }).parse(req.body);

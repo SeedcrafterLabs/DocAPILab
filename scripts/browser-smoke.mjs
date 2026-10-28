@@ -29,7 +29,7 @@ try {
   await until(`document.querySelector('[role=dialog]') !== null`);
   await evaluate(`document.querySelector('button[aria-label=\"Cerrar\"]').click()`);
   await click('Cat\u00e1logo de APIs');
-  await until(`document.body.innerText.includes('Nuestro cat\u00e1logo est\u00e1 en camino')`);
+  await until(`document.body.innerText.includes('Frankfurter')`);
   await evaluate(`fetch('/api/integrations/catalog',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'inegi'})}).then(r=>r.json())`);
   await send('Page.reload');
   await until(`document.querySelector('.home-actions') !== null`);
