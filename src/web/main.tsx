@@ -87,7 +87,7 @@ function CatalogEntries({ entries, onCreate, busy }: { entries: any[]; onCreate:
 }
 function IndexingJobs({ jobs, onOpen }: { jobs: Job[]; onOpen: (id: string) => void }) {
   if (!jobs.length) return null;
-  return <section className="indexing-jobs" aria-live="polite"><h2>Indexación de documentación</h2><p>Máximo 8 páginas y 3 análisis de IA por recorrido. Puedes seguir usando tus sandboxes.</p>{jobs.slice(0, 5).map(job => {
+  return <section className="indexing-jobs" aria-live="polite"><h2>Indexación de documentación</h2><p>Máximo 30 páginas con Firecrawl y 6 análisis de IA por recorrido. Puedes seguir usando tus sandboxes.</p>{jobs.slice(0, 5).map(job => {
     const active = !['ready', 'failed'].includes(job.state);
     return <article className="indexing-job" key={job.id}><div className="indexing-heading">{active ? <LoaderCircle size={18} className="spin"/> : job.state === 'ready' ? <Check size={18}/> : <AlertCircle size={18}/>}<strong>{job.sourceUrl}</strong><span>{active ? 'En segundo plano' : job.state === 'ready' ? 'Completado' : 'Sin endpoints verificables'}</span></div><p>{job.message}</p>{job.pages?.map((page, index) => <div className="indexed-page" key={index}><span className={'index-state ' + page.state}>{page.state === 'reading' ? 'Leyendo' : page.state === 'analyzing' ? 'Analizando' : page.state === 'ready' ? 'Listo' : 'Revisado'}</span><div><strong>{page.title}</strong><small>{page.url}</small>{page.message && <p>{page.message}</p>}</div>{page.integrationId && <button className="button" onClick={() => onOpen(page.integrationId!)}>Probar {page.operations} endpoints<ArrowRight size={13}/></button>}</div>)}</article>;
   })}</section>;

@@ -8,7 +8,7 @@ import { catalog } from './catalog.js';
 import { createStore, SettingsStore, type Store } from './store.js';
 import { compileSchema, operations, localPath, routePattern, publicIntegration, responseExample, validateContract, version, isSecret } from './contracts.js';
 import { fetchDocumentation, extractContract, hasEndpointDocumentation } from './extract.js';
-import { fetchFirecrawlDocumentation } from './firecrawl.js';
+import { readDocumentation } from './documentation.js';
 import { proposeMigration } from './migration.js';
 import type { Contract, Integration, Job } from '../shared/types.js';
 
@@ -87,7 +87,7 @@ export async function createApp(options: Options = {}) {
     const owner = res.locals.owner as string;
     // In hosted mode, use the actual TCP peer as well as the signed session; never trust forwarded headers.
     const quotaKey = hosted ? req.socket.remoteAddress || owner : owner;
-    if ((quotas.get(quotaKey) || 0) >= Number(process.env.AI_MAX_CALLS_PER_SESSION || (hosted ? 3 : 100))) return res.status(429).json({ error: 'Límite de generación alcanzado para esta sesión/red.' });
+    if ((quotas.get(quotaKey) || 0) >= Number(process.env.AI_MAX_CALLS_PER_SESSION || (hosted ? 6 : 100))) return res.status(429).json({ error: 'Límite de generación alcanzado para esta sesión/red.' });
     if (totalCalls >= Number(process.env.AI_MAX_CALLS_TOTAL || (hosted ? 30 : 1000))) return res.status(429).json({ error: 'Presupuesto de llamadas de esta instancia agotado.' });
     const job: Job = { id: randomUUID(), state: 'queued', message: 'Preparando documentación…', sourceUrl: url, pages: [], integrationIds: [] };
     ownedJobs.set(job.id, { owner, job });
@@ -98,21 +98,24 @@ export async function createApp(options: Options = {}) {
       try {
         const queue = [{ url, title: 'Documentación inicial', score: 0, depth: 0 }];
         const visited = new Set<string>(); let modelCalls = 0;
-        while (queue.length && visited.size < 8 && job.integrationIds!.length < 3) {
+        while (queue.length && visited.size < 30 && job.integrationIds!.length < 6) {
           queue.sort((a, b) => b.score - a.score);
           const next = queue.shift()!; if (visited.has(next.url)) continue; visited.add(next.url);
           const page: NonNullable<Job['pages']>[number] = { url: next.url, title: next.title, state: 'reading' };
-          job.pages!.push(page); job.state = 'fetching'; job.message = `Leyendo página ${visited.size}/8: ${next.title}`;
+          job.pages!.push(page); job.state = 'fetching'; job.message = `Leyendo página ${visited.size}/30: ${next.title}`;
           try {
-            const doc = options.fetchDocs ? await options.fetchDocs(next.url) : await fetchFirecrawlDocumentation(next.url, current.firecrawlApiKey);
-            if (next.depth < 2) for (const link of (doc.links || []).slice(0, 12)) if (!visited.has(link.url) && !queue.some(entry => entry.url === link.url)) queue.push({ ...link, depth: next.depth + 1 });
+            const doc = options.fetchDocs ? await options.fetchDocs(next.url) : await readDocumentation(next.url, current.firecrawlApiKey, () => {
+              page.message = 'Respaldo activo: lectura directa para análisis con IA y búsqueda de enlaces.';
+              job.message = `Firecrawl sin referencias suficientes. Leyendo directamente ${next.title} para la IA…`;
+            });
+            if (next.depth < 2) for (const link of (doc.links || []).slice(0, 30)) if (!visited.has(link.url) && !queue.some(entry => entry.url === link.url)) queue.push({ ...link, depth: next.depth + 1 });
             if (!doc.direct && !hasEndpointDocumentation(doc.text) && doc.links?.length) { page.state = 'skipped'; page.message = 'Índice de documentación: buscando referencias de API en sus enlaces.'; continue; }
             let contract: Contract;
             if (doc.direct) contract = await validateContract(doc.direct);
             else {
               if (!current.apiKey) throw new Error('Agrega la API key del proveedor seleccionado en Ajustes.');
-              if (modelCalls >= 3) { page.state = 'skipped'; page.message = 'Límite de 3 análisis de IA por indexación.'; continue; }
-              if (totalCalls >= Number(process.env.AI_MAX_CALLS_TOTAL || (hosted ? 30 : 1000)) || (quotas.get(quotaKey) || 0) >= Number(process.env.AI_MAX_CALLS_PER_SESSION || (hosted ? 3 : 100))) { page.state = 'skipped'; page.message = 'Límite de consumo alcanzado.'; break; }
+              if (modelCalls >= 6) { page.state = 'skipped'; page.message = 'Límite de 6 análisis de IA por indexación.'; continue; }
+              if (totalCalls >= Number(process.env.AI_MAX_CALLS_TOTAL || (hosted ? 30 : 1000)) || (quotas.get(quotaKey) || 0) >= Number(process.env.AI_MAX_CALLS_PER_SESSION || (hosted ? 6 : 100))) { page.state = 'skipped'; page.message = 'Límite de consumo alcanzado.'; break; }
               totalCalls++; modelCalls++; quotas.set(quotaKey, (quotas.get(quotaKey) || 0) + 1);
               page.state = 'analyzing'; job.state = 'extracting'; job.message = `Analizando ${next.title} con ${current.provider}…`;
               contract = await (options.extract || extractContract)(doc.text, doc.sourceUrl, current.apiKey, current.model, current.provider);
@@ -125,7 +128,7 @@ export async function createApp(options: Options = {}) {
           } catch (error) { page.state = 'skipped'; page.message = safeError(error); }
           // A concrete endpoint page is a complete request; only hubs expand into a crawl.
           if (next.depth === 0 && page.state === 'ready') break;
-          if (modelCalls >= 3) break;
+          if (modelCalls >= 6) break;
         }
         if (!job.integrationIds!.length) throw new Error('No encontramos endpoints verificables. El sitio puede ser un índice, requerir JavaScript o una referencia de API más específica. ' + (job.pages?.at(-1)?.message || ''));
         job.state = 'ready'; job.message = `${job.integrationIds!.length} sandbox(s) listos. ${visited.size} páginas revisadas.`;
